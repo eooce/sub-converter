@@ -185,10 +185,9 @@ For detailed API documentation, please refer to [APIDoc.md](/docs/APIDoc.md)
 
 ## 📝 Recent Updates
 
-### 2025-05-02
+### 2025-11-08
 
-- Automatic renaming is now applied when proxies with the same name exist ([#175](https://github.com/7Sageer/sublink-worker/pull/175))
-- Fixed DNS configuration for Singbox ([#174](https://github.com/7Sageer/sublink-worker/pull/174))
+- feat(config): Added support for proxy configuration grouped by country, updated related translations
 
 ## 🔧 Project Structure
 

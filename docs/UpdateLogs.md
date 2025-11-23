@@ -1,5 +1,15 @@
 # 更新日志
 
+## 2025-11-08
+
+- feat(config): Added support for proxy configuration grouped by country, updated related translations
+
+## 2025-09-28
+
+- 修复singbox 1.12.0中部分配置造成警告的问题
+- 其他各种各样的小问题，懒得翻commits了
+
+
 ## 2025-05-02
 
 - 现在如果存在相同名称的代理，会自动进行重命名([#175](https://github.com/7Sageer/sublink-worker/pull/175))

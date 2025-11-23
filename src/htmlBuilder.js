@@ -96,6 +96,7 @@ const generateAdvancedOptionsToggle = () => `
 const generateAdvancedOptions = () => `
   <div id="advancedOptions">
     ${generateRuleSetSelection()}
+    ${generateGroupByCountrySection()}
     ${generateBaseConfigSection()}
     ${generateUASection()}
   </div>
@@ -143,7 +144,12 @@ const generateCustomPathSection = (baseUrl) => `
   <div class="mb-4 mt-3">
     <label for="customShortCode" class="form-label">${t('customPath')}</label>
     <div class="input-group flex-nowrap">
-      <span class="input-group-text text-truncate" style="max-width: 400px;" title="${baseUrl}/s/">
+      <span
+        class="input-group-text text-truncate"
+        id="customPathPrefix"
+        style="max-width: 400px;"
+        title="${baseUrl}/s/"
+      >
         ${baseUrl}/s/
       </span>
       <input type="text" class="form-control" id="customShortCode" placeholder="e.g. my-custom-link">
@@ -230,6 +236,13 @@ const customPathFunctions = () => `
   document.addEventListener('DOMContentLoaded', function() {
     updateSavedPathsDropdown();
     document.getElementById('savedCustomPaths').addEventListener('change', loadSavedCustomPath);
+
+    const prefixSpan = document.getElementById('customPathPrefix');
+    if (prefixSpan) {
+      const originPrefix = \`\${window.location.origin}/s/\`;
+      prefixSpan.textContent = originPrefix;
+      prefixSpan.title = originPrefix;
+    }
   });
 `;
 
@@ -461,6 +474,25 @@ const generateJSONView = () => `
   </div>
 `;
 
+const generateGroupByCountrySection = () => `
+  <div class="form-section">
+    <div class="d-flex justify-content-between align-items-center py-2">
+      <div class="form-section-title d-flex align-items-center mb-0">
+        ${t('groupByCountry')}
+        <span class="tooltip-icon ms-2">
+          <i class="fas fa-question-circle"></i>
+          <span class="tooltip-content">
+            ${t('groupByCountryTip')}
+          </span>
+        </span>
+      </div>
+      <div class="form-check form-switch m-0">
+        <input class="form-check-input" type="checkbox" id="groupByCountry">
+      </div>
+    </div>
+  </div>
+`;
+
 const generateBaseConfigSection = () => `
   <div class="form-section">
     <div class="form-section-title d-flex align-items-center">
@@ -572,10 +604,12 @@ const submitFormFunction = () => `
     const inputString = formData.get('input');
 
     const userAgent = document.getElementById('customUA').value;
+    const groupByCountry = document.getElementById('groupByCountry').checked;
     
     // Save form data to localStorage
     localStorage.setItem('inputTextarea', inputString);
     localStorage.setItem('advancedToggle', document.getElementById('advancedToggle').checked);
+    localStorage.setItem('groupByCountry', groupByCountry);
 
     // Save UserAgent data to localStorage
     localStorage.setItem('userAgent', document.getElementById('customUA').value);
@@ -599,10 +633,11 @@ const submitFormFunction = () => `
     const customRules = parseCustomRules();
 
     const configParam = configId ? \`&configId=\${configId}\` : '';
-    const xrayUrl = \`\${window.location.origin}/xray?config=\${encodeURIComponent(inputString)}&ua=\${encodeURIComponent(userAgent)}\${configParam}\`;
-    const singboxUrl = \`\${window.location.origin}/singbox?config=\${encodeURIComponent(inputString)}&ua=\${encodeURIComponent(userAgent)}&selectedRules=\${encodeURIComponent(JSON.stringify(selectedRules))}&customRules=\${encodeURIComponent(JSON.stringify(customRules))}\${configParam}\`;
-    const clashUrl = \`\${window.location.origin}/clash?config=\${encodeURIComponent(inputString)}&ua=\${encodeURIComponent(userAgent)}&selectedRules=\${encodeURIComponent(JSON.stringify(selectedRules))}&customRules=\${encodeURIComponent(JSON.stringify(customRules))}\${configParam}\`;
-    const surgeUrl = \`\${window.location.origin}/surge?config=\${encodeURIComponent(inputString)}&ua=\${encodeURIComponent(userAgent)}&selectedRules=\${encodeURIComponent(JSON.stringify(selectedRules))}&customRules=\${encodeURIComponent(JSON.stringify(customRules))}\${configParam}\`;
+    const groupByCountryParam = groupByCountry ? '&group_by_country=true' : '';
+    const xrayUrl = \`\${window.location.origin}/xray?config=\${encodeURIComponent(inputString)}&ua=\${encodeURIComponent(userAgent)}\${configParam}\${groupByCountryParam}\`;
+    const singboxUrl = \`\${window.location.origin}/singbox?config=\${encodeURIComponent(inputString)}&ua=\${encodeURIComponent(userAgent)}&selectedRules=\${encodeURIComponent(JSON.stringify(selectedRules))}&customRules=\${encodeURIComponent(JSON.stringify(customRules))}\${configParam}\${groupByCountryParam}\`;
+    const clashUrl = \`\${window.location.origin}/clash?config=\${encodeURIComponent(inputString)}&ua=\${encodeURIComponent(userAgent)}&selectedRules=\${encodeURIComponent(JSON.stringify(selectedRules))}&customRules=\${encodeURIComponent(JSON.stringify(customRules))}\${configParam}\${groupByCountryParam}\`;
+    const surgeUrl = \`\${window.location.origin}/surge?config=\${encodeURIComponent(inputString)}&ua=\${encodeURIComponent(userAgent)}&selectedRules=\${encodeURIComponent(JSON.stringify(selectedRules))}&customRules=\${encodeURIComponent(JSON.stringify(customRules))}\${configParam}\${groupByCountryParam}\`;
     document.getElementById('xrayLink').value = xrayUrl;
     document.getElementById('singboxLink').value = singboxUrl;
     document.getElementById('clashLink').value = clashUrl;
@@ -685,6 +720,12 @@ const submitFormFunction = () => `
         } catch (e) {
           console.error('Error parsing custom rules:', e);
         }
+      }
+
+      // Parse group_by_country
+      const groupByCountry = params.get('group_by_country');
+      if (groupByCountry) {
+        document.getElementById('groupByCountry').checked = groupByCountry === 'true';
       }
 
       // Parse configuration ID
@@ -786,6 +827,11 @@ const submitFormFunction = () => `
         document.getElementById('advancedOptions').classList.add('show');
       }
     }
+
+    const groupByCountry = localStorage.getItem('groupByCountry');
+    if (groupByCountry) {
+      document.getElementById('groupByCountry').checked = groupByCountry === 'true';
+    }
     
     // Load userAgent
     const savedUA = localStorage.getItem('userAgent');
@@ -845,10 +891,12 @@ const submitFormFunction = () => `
     localStorage.removeItem('configEditor'); 
     localStorage.removeItem('configType');
     localStorage.removeItem('userAgent');
+    localStorage.removeItem('groupByCountry');
     
     document.getElementById('inputTextarea').value = '';
     document.getElementById('advancedToggle').checked = false;
     document.getElementById('advancedOptions').classList.remove('show');
+    document.getElementById('groupByCountry').checked = false;
     document.getElementById('configEditor').value = '';
     document.getElementById('configType').value = 'singbox'; 
     document.getElementById('customUA').value = '';
