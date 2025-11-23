@@ -294,6 +294,90 @@ export class ProxyParser {
 				tag = decodeURIComponent(tag);
 			}
 
+			// 检查是否有插件参数
+			let pluginOpts = {};
+			if (mainPart.includes('?plugin=')) {
+				const [basePart, pluginPart] = mainPart.split('?plugin=');
+				mainPart = basePart;
+				
+				// 解析插件参数
+				const pluginParams = pluginPart.split(';');
+				const pluginName = decodeURIComponent(pluginParams[0]);
+				
+				// 解析插件选项
+				for (let i = 1; i < pluginParams.length; i++) {
+					const param = pluginParams[i];
+					if (param.includes('%3D')) { // '=' encoded as '%3D'
+						const eqIndex = param.indexOf('%3D');
+						const key = param.substring(0, eqIndex);
+						const value = param.substring(eqIndex + 3); // Skip '%3D'
+						const decodedKey = decodeURIComponent(key);
+						const decodedValue = decodeURIComponent(value);
+						
+						switch(decodedKey) {
+							case 'mode':
+								pluginOpts.mode = decodedValue;
+								break;
+							case 'host':
+								pluginOpts.host = decodedValue;
+								break;
+							case 'path':
+								pluginOpts.path = decodedValue;
+								break;
+							case 'peer':
+								pluginOpts.peer = decodedValue;
+								break;
+							case 'skip-cert-verify':
+								pluginOpts.skip_cert_verify = decodedValue === 'true';
+								break;
+							case 'mux':
+								pluginOpts.mux = decodedValue === '1' || decodedValue === 'true';
+								break;
+							case 'tls':
+								pluginOpts.tls = true;
+								break;
+						}
+					} else if (param.includes('=')) { // '=' without encoding
+						const eqIndex = param.indexOf('=');
+						const key = param.substring(0, eqIndex);
+						const value = param.substring(eqIndex + 1);
+						
+						switch(key) {
+							case 'mode':
+								pluginOpts.mode = value;
+								break;
+							case 'host':
+								pluginOpts.host = value;
+								break;
+							case 'path':
+								pluginOpts.path = value;
+								break;
+							case 'peer':
+								pluginOpts.peer = value;
+								break;
+							case 'skip-cert-verify':
+								pluginOpts.skip_cert_verify = value === 'true';
+								break;
+							case 'mux':
+								pluginOpts.mux = value === '1' || value === 'true';
+								break;
+							case 'tls':
+								pluginOpts.tls = true;
+								break;
+						}
+					} else if (param === 'tls') {
+						pluginOpts.tls = true;
+					}
+				}
+				
+				// 设置插件名称
+				if (pluginName === 'v2ray-plugin') {
+					pluginOpts.type = 'v2ray-plugin';
+				} else {
+					pluginOpts.type = pluginName;
+				}
+			}
+
 			// Try new format first
 			try {
 				let [base64, serverPart] = mainPart.split('@');
@@ -306,7 +390,7 @@ export class ProxyParser {
 					let [method, password] = methodAndPass.split(':');
 					let [server, server_port] = this.parseServer(serverInfo);
 					
-					return this.createConfig(tag, server, server_port, method, password);
+					return this.createConfig(tag, server, server_port, method, password, pluginOpts);
 				}
 
 				// Continue with new format parsing
@@ -315,7 +399,7 @@ export class ProxyParser {
 				let password = decodedParts.slice(1).join(':');
 				let [server, server_port] = this.parseServer(serverPart);
 
-				return this.createConfig(tag, server, server_port, method, password);
+				return this.createConfig(tag, server, server_port, method, password, pluginOpts);
 			} catch (e) {
 				console.error('Failed to parse shadowsocks URL:', e);
 				return null;
@@ -333,7 +417,7 @@ export class ProxyParser {
 		}
 
 		// Helper method to create config object
-		createConfig(tag, server, server_port, method, password) {
+		createConfig(tag, server, server_port, method, password, pluginOpts) {
 			return {
 				"tag": tag || "Shadowsocks",
 				"type": 'shadowsocks',
@@ -342,7 +426,9 @@ export class ProxyParser {
 				"method": method,
 				"password": password,
 				"network": 'tcp',
-				"tcp_fast_open": false
+				"tcp_fast_open": false,
+				"plugin": pluginOpts.type,
+				"plugin_opts": pluginOpts
 			};
 		}
 	}
