@@ -531,12 +531,11 @@ export class ClashConfigBuilder extends BaseConfigBuilder {
         this.config.rules = [...ruleResults];
         this.config.rules.push(`MATCH,${t('outboundNames.Fall Back')}`);
 
-        // 使用特定选项来控制YAML格式，确保plugin-opts以换行缩进方式显示
         return yaml.dump(this.config, {
             lineWidth: -1,
             noRefs: true,
             quotingType: '"',
-            flowLevel: -1  // 设置为-1以确保所有对象都使用块样式（换行缩进）
+            flowLevel: -1 
         });
     }
 }
