@@ -325,9 +325,12 @@ export class ProxyParser {
 								pluginOpts.path = decodedValue;
 								break;
 							case 'peer':
+							case 'sni':
 								pluginOpts.peer = decodedValue;
 								break;
 							case 'skip-cert-verify':
+              case 'allowinsecure':
+              case 'insecure':
 								pluginOpts.skip_cert_verify = decodedValue === 'true';
 								break;
 							case 'mux':
@@ -337,7 +340,7 @@ export class ProxyParser {
 								pluginOpts.tls = true;
 								break;
 						}
-					} else if (param.includes('=')) { // '=' without encoding
+					} else if (param.includes('=')) { 
 						const eqIndex = param.indexOf('=');
 						const key = param.substring(0, eqIndex);
 						const value = param.substring(eqIndex + 1);
@@ -353,9 +356,12 @@ export class ProxyParser {
 								pluginOpts.path = value;
 								break;
 							case 'peer':
+							case 'sni':
 								pluginOpts.peer = value;
 								break;
 							case 'skip-cert-verify':
+              case 'allowinsecure':
+              case 'insecure':
 								pluginOpts.skip_cert_verify = value === 'true';
 								break;
 							case 'mux':
@@ -435,300 +441,297 @@ export class ProxyParser {
 
 	class VmessParser {
 		parse(url) {
-            // Support fragment name after base64: vmess://BASE64#Name
-            let base64WithFragment = url.replace('vmess://', '')
-            let tagOverride;
-            const hashPos = base64WithFragment.indexOf('#');
-            if (hashPos >= 0) {
-                tagOverride = decodeURIComponent(base64WithFragment.slice(hashPos + 1));
-                base64WithFragment = base64WithFragment.slice(0, hashPos);
-            }
-            let vmessConfig = JSON.parse(decodeBase64(base64WithFragment))
-            let tls = { "enabled": false }
-            let transport;
-            const networkType = vmessConfig.net || 'tcp';
-            const transportType = vmessConfig.type || networkType;
+      // Support fragment name after base64: vmess://BASE64#Name
+      let base64WithFragment = url.replace('vmess://', '')
+      let tagOverride;
+      const hashPos = base64WithFragment.indexOf('#');
+      if (hashPos >= 0) {
+          tagOverride = decodeURIComponent(base64WithFragment.slice(hashPos + 1));
+          base64WithFragment = base64WithFragment.slice(0, hashPos);
+      }
+      let vmessConfig = JSON.parse(decodeBase64(base64WithFragment))
+      let tls = { "enabled": false }
+      let transport;
+      const networkType = vmessConfig.net || 'tcp';
+      const transportType = vmessConfig.type || networkType;
 
-            const tlsEnabled = vmessConfig.tls && vmessConfig.tls !== '' && vmessConfig.tls !== 'none';
-            if (tlsEnabled) {
-                tls = {
-                    "enabled": true,
-                    "server_name": vmessConfig.sni,
-                    "insecure": vmessConfig['skip-cert-verify'] || false
-                }
-            }
+      const tlsEnabled = vmessConfig.tls && vmessConfig.tls !== '' && vmessConfig.tls !== 'none';
+      if (tlsEnabled) {
+          tls = {
+              "enabled": true,
+              "server_name": vmessConfig.sni,
+              "insecure": vmessConfig['skip-cert-verify'] || false
+          }
+      }
 
-            if (networkType === 'ws') {
-                transport = {
-                    "type": "ws",
-                    "path": vmessConfig.path,
-                    "headers": { 'Host': vmessConfig.host ? vmessConfig.host : vmessConfig.sni }
-                }
-            } else if ((networkType === 'tcp' && transportType === 'http') || networkType === 'http') {
-                const method = vmessConfig.method || 'GET';
-                const path = vmessConfig.path || '/';
-                const normalizeToArray = (value) => {
-                    if (!value) {
-                        return undefined;
-                    }
-                    return Array.isArray(value) ? value : [value];
-                };
-                const headers = (() => {
-                    const hostHeader = normalizeToArray(vmessConfig.host || vmessConfig.sni);
-                    if (vmessConfig.headers && typeof vmessConfig.headers === 'object') {
-                        const normalized = {};
-                        Object.entries(vmessConfig.headers).forEach(([key, value]) => {
-                            const normalizedValue = normalizeToArray(value)?.map(entry => `${entry}`);
-                            if (normalizedValue && normalizedValue.length > 0) {
-                                normalized[key] = normalizedValue;
-                            }
-                        });
-                        if (hostHeader && !normalized.Host) {
-                            normalized.Host = hostHeader;
-                        }
-                        if (Object.keys(normalized).length > 0) {
-                            return normalized;
-                        }
-                    }
+      if (networkType === 'ws') {
+          transport = {
+              "type": "ws",
+              "path": vmessConfig.path,
+              "headers": { 'Host': vmessConfig.host ? vmessConfig.host : vmessConfig.sni }
+          }
+      } else if ((networkType === 'tcp' && transportType === 'http') || networkType === 'http') {
+          const method = vmessConfig.method || 'GET';
+          const path = vmessConfig.path || '/';
+          const normalizeToArray = (value) => {
+              if (!value) {
+                  return undefined;
+              }
+              return Array.isArray(value) ? value : [value];
+          };
+          const headers = (() => {
+              const hostHeader = normalizeToArray(vmessConfig.host || vmessConfig.sni);
+              if (vmessConfig.headers && typeof vmessConfig.headers === 'object') {
+                  const normalized = {};
+                  Object.entries(vmessConfig.headers).forEach(([key, value]) => {
+                      const normalizedValue = normalizeToArray(value)?.map(entry => `${entry}`);
+                      if (normalizedValue && normalizedValue.length > 0) {
+                          normalized[key] = normalizedValue;
+                      }
+                  });
+                  if (hostHeader && !normalized.Host) {
+                      normalized.Host = hostHeader;
+                  }
+                  if (Object.keys(normalized).length > 0) {
+                      return normalized;
+                  }
+              }
 
-                    return hostHeader ? { 'Host': hostHeader } : undefined;
-                })();
+              return hostHeader ? { 'Host': hostHeader } : undefined;
+          })();
 
-                transport = {
-                    "type": "http",
-                    "method": method,
-                    "path": Array.isArray(path) ? path : [path],
-                    "headers": headers
-                }
-            } else if (networkType === 'grpc') {
-                transport = {
-                    "type": "grpc",
-                    "service_name": vmessConfig?.path || vmessConfig?.serviceName
-                }
-            } else if (networkType === 'h2') {
-                const hostValue = vmessConfig.host || vmessConfig.sni;
-                transport = {
-                    "type": "h2",
-                    "path": vmessConfig.path,
-                    "host": hostValue ? (Array.isArray(hostValue) ? hostValue : [hostValue]) : undefined
-                }
-            }
-            return {
-                "tag": tagOverride || vmessConfig.ps,
-                "type": "vmess",
-                "server": vmessConfig.add,
-                "server_port": parseInt(vmessConfig.port),
-                "uuid": vmessConfig.id,
-                "alter_id": parseInt(vmessConfig.aid),
-                "security": vmessConfig.scy || "auto",
-                "network": transport?.type || networkType || "tcp",
-                "tcp_fast_open": false,
-                "transport": transport,
-                "tls": tls.enabled ? tls : undefined
-            }
-
+          transport = {
+              "type": "http",
+              "method": method,
+              "path": Array.isArray(path) ? path : [path],
+              "headers": headers
+          }
+      } else if (networkType === 'grpc') {
+          transport = {
+              "type": "grpc",
+              "service_name": vmessConfig?.path || vmessConfig?.serviceName
+          }
+      } else if (networkType === 'h2') {
+          const hostValue = vmessConfig.host || vmessConfig.sni;
+          transport = {
+              "type": "h2",
+              "path": vmessConfig.path,
+              "host": hostValue ? (Array.isArray(hostValue) ? hostValue : [hostValue]) : undefined
+          }
+      }
+      return {
+          "tag": tagOverride || vmessConfig.ps,
+          "type": "vmess",
+          "server": vmessConfig.add,
+          "server_port": parseInt(vmessConfig.port),
+          "uuid": vmessConfig.id,
+          "alter_id": parseInt(vmessConfig.aid),
+          "security": vmessConfig.scy || "auto",
+          "network": transport?.type || networkType || "tcp",
+          "tcp_fast_open": false,
+          "transport": transport,
+          "tls": tls.enabled ? tls : undefined
+      }
 		}
 	}
 
-    class VlessParser {
-        parse(url) {
-          const { addressPart, params, name } = parseUrlParams(url);
-          const [uuid, serverInfo] = addressPart.split('@');
-          const { host, port } = parseServerInfo(serverInfo);
-      
-          const tls = createTlsConfig(params);
-          if (tls.reality){
-            tls.utls = {
-              enabled: true,
-              fingerprint: "chrome",
-            }
-          }
-          const transport = params.type !== 'tcp' ? createTransportConfig(params) : undefined;
-      
-          return {
-            type: "vless",
-            tag: name,
-            server: host,
-            server_port: port,
-            uuid: decodeURIComponent(uuid),
-            tcp_fast_open: false,
-            tls: tls,
-            transport: transport,
-            network: "tcp",
-            flow: params.flow ?? undefined
-          };
-        }
-      }
-      
-      class Hysteria2Parser {
-        parse(url) {
-          const { addressPart, params, name } = parseUrlParams(url);
-          // 处理不包含 @ 的 URL 格式
-          let host, port;
-          let password = null;
-
-          if (addressPart.includes('@')) {
-            const [uuid, serverInfo] = addressPart.split('@');
-            const parsed = parseServerInfo(serverInfo);
-            host = parsed.host;
-            port = parsed.port;
-            password = decodeURIComponent(uuid);
-          } else {
-            // 直接解析服务器地址和端口
-            const parsed = parseServerInfo(addressPart);
-            host = parsed.host;
-            port = parsed.port;
-            // 如果 URL 中没有 @，则尝试从 params.auth 获取密码
-            password = params.auth;
-          }
-      
-          const tls = createTlsConfig(params);
-
-          const obfs = {};
-          if (params['obfs-password']) {
-            obfs.type = params.obfs;
-            obfs.password = params['obfs-password'];
-          }
-
-          const hopInterval = parseMaybeNumber(params['hop-interval']);
-
-          return {
-            tag: name,
-            type: "hysteria2",
-            server: host,
-            server_port: port,
-            password: password,
-            tls: tls,
-            obfs: Object.keys(obfs).length > 0 ? obfs : undefined,
-            auth: params.auth,
-            recv_window_conn: params.recv_window_conn,
-            up: params.up ?? (params.upmbps ? parseMaybeNumber(params.upmbps) : undefined),
-            down: params.down ?? (params.downmbps ? parseMaybeNumber(params.downmbps) : undefined),
-            ports: params.ports,
-            hop_interval: hopInterval,
-            alpn: parseArray(params.alpn),
-            fast_open: parseBool(params['fast-open'])
-          };
-        }
-      }
-
-      class TrojanParser {
-        parse(url) {
-          const { addressPart, params, name } = parseUrlParams(url);
-          const [password, serverInfo] = addressPart.split('@');
-          const { host, port } = parseServerInfo(serverInfo);
-
-          const parsedURL = parseServerInfo(addressPart);
-          const tls = createTlsConfig(params);
-          const transport = params.type !== 'tcp' ? createTransportConfig(params) : undefined;
-          return {
-            type: 'trojan',
-            tag: name,
-            server: host,
-            server_port: port,
-            password: decodeURIComponent(password) || parsedURL.username,
-            network: "tcp",
-            tcp_fast_open: false,
-            tls: tls,
-            transport: transport,
-            flow: params.flow ?? undefined
-          };
-        }
-      }
-
-      class TuicParser {
-
-        parse(url) {
-          const { addressPart, params, name } = parseUrlParams(url);
-          const [userinfo, serverInfo] = addressPart.split('@');
-          const { host, port } = parseServerInfo(serverInfo);
-          const tls = {
+  class VlessParser {
+      parse(url) {
+        const { addressPart, params, name } = parseUrlParams(url);
+        const [uuid, serverInfo] = addressPart.split('@');
+        const { host, port } = parseServerInfo(serverInfo);
+    
+        const tls = createTlsConfig(params);
+        if (tls.reality){
+          tls.utls = {
             enabled: true,
-            server_name: params.sni,
-            alpn: parseArray(params.alpn),
-            insecure: parseBool(params['skip-cert-verify'] ?? params.insecure ?? params.allowInsecure, true),
-          };
-      
-          return {
-            tag: name,
-            type: "tuic",
-            server: host,
-            server_port: port,
-            uuid: decodeURIComponent(userinfo).split(':')[0],
-            password: decodeURIComponent(userinfo).split(':')[1],
-            congestion_control: params.congestion_control,
-            tls: tls,
-            flow: params.flow ?? undefined,
-            udp_relay_mode: params['udp-relay-mode'] || params.udp_relay_mode,
-            zero_rtt: parseBool(params['zero-rtt'], undefined),
-            reduce_rtt: parseBool(params['reduce-rtt'], undefined),
-            fast_open: parseBool(params['fast-open'], undefined),
-            disable_sni: parseBool(params['disable-sni'], undefined)
-          };
+            fingerprint: "chrome",
+          }
         }
+        const transport = params.type !== 'tcp' ? createTransportConfig(params) : undefined;
+    
+        return {
+          type: "vless",
+          tag: name,
+          server: host,
+          server_port: port,
+          uuid: decodeURIComponent(uuid),
+          tcp_fast_open: false,
+          tls: tls,
+          transport: transport,
+          network: "tcp",
+          flow: params.flow ?? undefined
+        };
       }
-      
-
-      class HttpParser {
-        static async parse(url, userAgent) {
-            try {
-                let headers = new Headers({
-                  "User-Agent"   : userAgent
-                });
-                const response = await fetch(url, {
-                  method : 'GET',
-                  headers : headers
-                });
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                const text = await response.text();
-                let decodedText;
-                try {
-                    decodedText = decodeBase64(text.trim());
-                    // Check if the decoded text needs URL decoding
-                    if (decodedText.includes('%')) {
-                        decodedText = decodeURIComponent(decodedText);
-                    }
-                } catch (e) {
-                    decodedText = text;
-                    // Check if the original text needs URL decoding
-                    if (decodedText.includes('%')) {
-                        try {
-                            decodedText = decodeURIComponent(decodedText);
-                        } catch (urlError) {
-                            console.warn('Failed to URL decode the text:', urlError);
-                        }
-                    }
-                }
-                // Try YAML first: if content parses and has proxies, convert to internal objects
-                try {
-                    const parsed = yaml.load(decodedText);
-                    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.proxies)) {
-                        const proxies = parsed.proxies
-                          .map(p => convertYamlProxyToObject(p))
-                          .filter(p => p != null);
-                        if (proxies.length > 0) {
-                            const configOverrides = DeepCopy(parsed);
-                            delete configOverrides.proxies;
-                            return {
-                                type: 'yamlConfig',
-                                proxies,
-                                config: Object.keys(configOverrides).length > 0 ? configOverrides : null
-                            };
-                        }
-                    }
-                } catch (yamlError) {
-                    console.warn('YAML parsing failed; fallback to line mode:', yamlError?.message || yamlError);
-                }
-
-                // Fallback: treat as subscription lines
-                return decodedText.split('\n').filter(line => line.trim() !== '');
-            } catch (error) {
-                console.error('Error fetching or parsing HTTP(S) content:', error);
-                return null;
-            }
-        }
-
-        // moved to shared helper convertYamlProxyToObject
     }
+      
+  class Hysteria2Parser {
+    parse(url) {
+      const { addressPart, params, name } = parseUrlParams(url);
+      // 处理不包含 @ 的 URL 格式
+      let host, port;
+      let password = null;
+
+      if (addressPart.includes('@')) {
+        const [uuid, serverInfo] = addressPart.split('@');
+        const parsed = parseServerInfo(serverInfo);
+        host = parsed.host;
+        port = parsed.port;
+        password = decodeURIComponent(uuid);
+      } else {
+        // 直接解析服务器地址和端口
+        const parsed = parseServerInfo(addressPart);
+        host = parsed.host;
+        port = parsed.port;
+        // 如果 URL 中没有 @，则尝试从 params.auth 获取密码
+        password = params.auth;
+      }
+  
+      const tls = createTlsConfig(params);
+
+      const obfs = {};
+      if (params['obfs-password']) {
+        obfs.type = params.obfs;
+        obfs.password = params['obfs-password'];
+      }
+
+      const hopInterval = parseMaybeNumber(params['hop-interval']);
+
+      return {
+        tag: name,
+        type: "hysteria2",
+        server: host,
+        server_port: port,
+        password: password,
+        tls: tls,
+        obfs: Object.keys(obfs).length > 0 ? obfs : undefined,
+        auth: params.auth,
+        recv_window_conn: params.recv_window_conn,
+        up: params.up ?? (params.upmbps ? parseMaybeNumber(params.upmbps) : undefined),
+        down: params.down ?? (params.downmbps ? parseMaybeNumber(params.downmbps) : undefined),
+        ports: params.ports,
+        hop_interval: hopInterval,
+        alpn: parseArray(params.alpn),
+        fast_open: parseBool(params['fast-open'])
+      };
+    }
+  }
+
+  class TrojanParser {
+    parse(url) {
+      const { addressPart, params, name } = parseUrlParams(url);
+      const [password, serverInfo] = addressPart.split('@');
+      const { host, port } = parseServerInfo(serverInfo);
+
+      const parsedURL = parseServerInfo(addressPart);
+      const tls = createTlsConfig(params);
+      const transport = params.type !== 'tcp' ? createTransportConfig(params) : undefined;
+      return {
+        type: 'trojan',
+        tag: name,
+        server: host,
+        server_port: port,
+        password: decodeURIComponent(password) || parsedURL.username,
+        network: "tcp",
+        tcp_fast_open: false,
+        tls: tls,
+        transport: transport,
+        flow: params.flow ?? undefined
+      };
+    }
+  }
+
+  class TuicParser {
+
+    parse(url) {
+      const { addressPart, params, name } = parseUrlParams(url);
+      const [userinfo, serverInfo] = addressPart.split('@');
+      const { host, port } = parseServerInfo(serverInfo);
+      const tls = {
+        enabled: true,
+        server_name: params.sni,
+        alpn: parseArray(params.alpn),
+        insecure: parseBool(params['skip-cert-verify'] ?? params.insecure ?? params.allowInsecure, true),
+      };
+  
+      return {
+        tag: name,
+        type: "tuic",
+        server: host,
+        server_port: port,
+        uuid: decodeURIComponent(userinfo).split(':')[0],
+        password: decodeURIComponent(userinfo).split(':')[1],
+        congestion_control: params.congestion_control,
+        tls: tls,
+        flow: params.flow ?? undefined,
+        udp_relay_mode: params['udp-relay-mode'] || params.udp_relay_mode,
+        zero_rtt: parseBool(params['zero-rtt'], undefined),
+        reduce_rtt: parseBool(params['reduce-rtt'], undefined),
+        fast_open: parseBool(params['fast-open'], undefined),
+        disable_sni: parseBool(params['disable-sni'], undefined)
+      };
+    }
+  }
+  
+
+  class HttpParser {
+    static async parse(url, userAgent) {
+      try {
+          let headers = new Headers({
+            "User-Agent"   : userAgent
+          });
+          const response = await fetch(url, {
+            method : 'GET',
+            headers : headers
+          });
+          if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          const text = await response.text();
+          let decodedText;
+          try {
+              decodedText = decodeBase64(text.trim());
+              // Check if the decoded text needs URL decoding
+              if (decodedText.includes('%')) {
+                  decodedText = decodeURIComponent(decodedText);
+              }
+          } catch (e) {
+              decodedText = text;
+              // Check if the original text needs URL decoding
+              if (decodedText.includes('%')) {
+                  try {
+                      decodedText = decodeURIComponent(decodedText);
+                  } catch (urlError) {
+                      console.warn('Failed to URL decode the text:', urlError);
+                  }
+              }
+          }
+          // Try YAML first: if content parses and has proxies, convert to internal objects
+          try {
+              const parsed = yaml.load(decodedText);
+              if (parsed && typeof parsed === 'object' && Array.isArray(parsed.proxies)) {
+                  const proxies = parsed.proxies
+                    .map(p => convertYamlProxyToObject(p))
+                    .filter(p => p != null);
+                  if (proxies.length > 0) {
+                      const configOverrides = DeepCopy(parsed);
+                      delete configOverrides.proxies;
+                      return {
+                          type: 'yamlConfig',
+                          proxies,
+                          config: Object.keys(configOverrides).length > 0 ? configOverrides : null
+                      };
+                  }
+              }
+          } catch (yamlError) {
+              console.warn('YAML parsing failed; fallback to line mode:', yamlError?.message || yamlError);
+          }
+
+          // Fallback: treat as subscription lines
+          return decodedText.split('\n').filter(line => line.trim() !== '');
+      } catch (error) {
+          console.error('Error fetching or parsing HTTP(S) content:', error);
+          return null;
+      }
+    }
+}
