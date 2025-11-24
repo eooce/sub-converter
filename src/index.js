@@ -40,20 +40,27 @@ async function handleRequest(request) {
 
       if (PREDEFINED_RULE_SETS[selectedRules]) {
         selectedRules = PREDEFINED_RULE_SETS[selectedRules];
-      } else {
+      } else if (selectedRules) {
         try {
           selectedRules = JSON.parse(decodeURIComponent(selectedRules));
         } catch (error) {
           console.error('Error parsing selectedRules:', error);
           selectedRules = PREDEFINED_RULE_SETS.minimal;
         }
+      } else {
+        // 如果没有提供selectedRules参数，使用默认值
+        selectedRules = PREDEFINED_RULE_SETS.minimal;
       }
 
       // Deal with custom rules
-      try {
-        customRules = JSON.parse(decodeURIComponent(customRules));
-      } catch (error) {
-        console.error('Error parsing customRules:', error);
+      if (customRules) {
+        try {
+          customRules = JSON.parse(decodeURIComponent(customRules));
+        } catch (error) {
+          console.error('Error parsing customRules:', error);
+          customRules = [];
+        }
+      } else {
         customRules = [];
       }
 
