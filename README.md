@@ -1,4 +1,4 @@
-# sub-converter
+# Sub-converter
 
 ## 项目简介
 
